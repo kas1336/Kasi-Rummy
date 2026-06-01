@@ -1,2 +1,2 @@
-# Kasi-Rummy-
+# Kasi-Rummy
 Indian rummy
