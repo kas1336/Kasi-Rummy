@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kasi Rummy - V6</title>
+<style>
+  :root{
+    --table:#07542f;
+    --panel:#0b3f27;
+    --line:#ffffff33;
+    --card:#ffffff;
+    --gold:#ffd54f;
+    --blue:#90caf9;
+    --red:#ffcdd2;
+    --green:#a5d6a7;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    padding:12px;
+    font-family:Arial,sans-serif;
+    background:var(--table);
+    color:white;
+    text-align:center;
+  }
+  h1{margin:10px 0 4px;font-size:34px}
+  h2{margin:12px 0 8px}
+  .version{font-size:13px;color:#d8efe3;margin-bottom:10px}
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:12px;
+    margin:10px auto;
+    max-width:850px;
+  }
+  .row{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    align-items:center;
+    gap:8px;
+    margin:8px 0;
+  }
+  button,select{
+    padding:11px 13px;
+    border:none;
+    border-radius:9px;
+    font-size:15px;
+  }
+  button{background:#f2f2f2;color:#111}
+  button:disabled{opacity:.45}
+  select{background:white;color:#111}
+  .stat{line-height:1.7;font-size:15px}
+  .small{font-size:13px;color:#d8efe3}
+  .card{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    background:white;
+    color:black;
+    min-width:46px;
+    height:54px;
+    padding:8px;
+    margin:4px;
+    border-radius:10px;
+    font-weight:bold;
+    border:2px solid transparent;
+    box-shadow:0 2px 5px #00000044;
+    cursor:pointer;
+  }
+  .red{color:#b00020}
+  .printed{background:var(--gold);border-color:#b8860b}
+  .wild{background:var(--blue);border-color:#1565c0}
+  .discard{background:#ffe082}
+  .group{
+    background:#ffffff18;
+    border:1px solid var(--line);
+    border-radius:12px;
+    margin:10px auto;
+    padding:10px;
+    max-width:760px;
+  }
+  .groupTitle{font-weight:bold;margin-bottom:6px}
+  .good{color:var(--green);font-weight:bold}
+  .bad{color:#ef9a9a;font-weight:bold}
+  .warn{color:#ffe082;font-weight:bold}
+</style>
+</head>
+<body>
+
+<h1>Kasi Rummy</h1>
+<div class="version">Version 6 - Single Player Indian Rummy Practice</div>
+
+<div class="panel">
+  <h2>Setup</h2>
+  <div class="row">
+    <label>
+      Joker Mode:
+      <select id="jokerMode" onchange="toggleCustomJoker()">
+        <option value="standard">Standard Wild Joker</option>
+        <option value="custom">Custom Wild Joker</option>
+        <option value="none">No Wild Joker</option>
+      </select>
+    </label>
+
+    <label id="customBox" style="display:none">
+      Custom Joker:
+      <select id="customRank">
+        <option>A</option><option>2</option><option>3</option><option>4</option><option>5</option>
+        <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+        <option>J</option><option>Q</option><option>K</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="row">
+    <button onclick="newGame()">New Game</button>
+  </div>
+
+  <div class="stat">
+    <div><b>Wild Joker:</b> <span id="wildText">Not selected</span></div>
+    <div><b>Turn:</b> <span id="turnText">Start a new game</span></div>
+    <div><b>Hand:</b> <span id="handCount">0</span> cards</div>
+    <div><b>Deck:</b> <span id="deckCount">0</span> cards</div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Actions</h2>
+  <div class="row">
+    <button id="drawDeckBtn" onclick="drawFromDeck()">Draw From Deck</button>
+    <button id="drawDiscardBtn" onclick="drawFromDiscard()">Draw From Discard</button>
+  </div>
+  <div class="row">
+    <button onclick="sortSuit()">Sort Suit</button>
+    <button onclick="sortRank()">Sort Rank</button>
+    <button onclick="analyseHand()">Check Hand</button>
+    <button onclick="declareHand()">Declare</button>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Discard Pile</h2>
+  <div id="discardArea">No discarded card</div>
+</div>
+
+<div class="panel">
+  <h2>Your Hand</h2>
+  <div class="small" id="instruction">Start a new game.</div>
+  <div id="handArea"></div>
+</div>
+
+<div class="panel">
+  <h2>Analysis</h2>
+  <div id="analysisArea">No analysis yet.</div>
+</div>
+
+<script>
+const suits = ["S","H","D","C"];
+const suitOrder = {S:1,H:2,D:3,C:4};
+const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+const rankOrder = {A:1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,"10":10,J:11,Q:12,K:13};
+
+let deck = [];
+let hand = [];
+let discard = [];
+let gameStarted = false;
+let phase = "not_started"; // not_started, draw, discard
+let wildRank = null;
+let wildText = "None";
+let nextId = 1;
+
+function toggleCustomJoker(){
+  const mode = document.getElementById("jokerMode").value;
+  document.getElementById("customBox").style.display = mode === "custom" ? "inline-block" : "none";
+}
+
+function makeCard(rank,suit,deckNo){
+  return {id:nextId++, type:"normal", rank, suit, deckNo};
+}
+
+function makePrintedJoker(deckNo){
+  return {id:nextId++, type:"PJ", rank:"PJ", suit:"J", deckNo};
+}
+
+function buildDeck(){
+  deck = [];
+  nextId = 1;
+  for(let d=1; d<=2; d++){
+    for(const s of suits){
+      for(const r of ranks){
+        deck.push(makeCard(r,s,d));
+      }
+    }
+    deck.push(makePrintedJoker(d));
+  }
+  shuffle(deck);
+}
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+}
+
+function chooseWildJoker(){
+  const mode = document.getElementById("jokerMode").value;
+  if(mode === "none"){
+    wildRank = null;
+    wildText = "None";
+    return;
+  }
+  if(mode === "custom"){
+    wildRank = document.getElementById("customRank").value;
+    wildText = "All " + wildRank + " cards";
+    return;
+  }
+  const normal = deck.filter(c => c.type === "normal");
+  const picked = normal[Math.floor(Math.random()*normal.length)];
+  wildRank = picked.rank;
+  wildText = picked.rank + " - all " + picked.rank + " cards";
+}
+
+function newGame(){
+  buildDeck();
+  chooseWildJoker();
+  hand = [];
+  discard = [];
+  for(let i=0;i<13;i++) hand.push(deck.pop());
+  discard.push(deck.pop());
+  gameStarted = true;
+  phase = "draw";
+  sortSuit(false);
+  document.getElementById("analysisArea").innerHTML = "No analysis yet.";
+  render();
+}
+
+function cardName(c){
+  if(c.type === "PJ") return "PJ";
+  return c.rank + c.suit;
+}
+
+function isRed(c){ return c.suit === "H" || c.suit === "D"; }
+function isPrintedJoker(c){ return c.type === "PJ"; }
+function isWildJoker(c){ return c.type === "normal" && wildRank !== null && c.rank === wildRank; }
+function isJoker(c){ return isPrintedJoker(c) || isWildJoker(c); }
+
+function drawFromDeck(){
+  if(!gameStarted) return alert("Start a new game first.");
+  if(phase !== "draw") return alert("You have already drawn. Discard one card now.");
+  if(deck.length === 0) return alert("Deck is empty.");
+  hand.push(deck.pop());
+  phase = "discard";
+  sortSuit(false);
+  render();
+}
+
+function drawFromDiscard(){
+  if(!gameStarted) return alert("Start a new game first.");
+  if(phase !== "draw") return alert("You have already drawn. Discard one card now.");
+  if(discard.length === 0) return alert("Discard pile is empty.");
+  hand.push(discard.pop());
+  phase = "discard";
+  sortSuit(false);
+  render();
+}
+
+function discardCard(index){
+  if(!gameStarted) return alert("Start a new game first.");
+  if(phase !== "discard") return alert("Draw one card first, then discard.");
+  if(hand.length !== 14) return alert("You should have 14 cards before discarding.");
+  const c = hand.splice(index,1)[0];
+  discard.push(c);
+  phase = "draw";
+  sortSuit(false);
+  render();
+}
+
+function sortSuit(doRender=true){
+  hand.sort((a,b)=>{
+    if(isJoker(a) && !isJoker(b)) return 1;
+    if(!isJoker(a) && isJoker(b)) return -1;
+    if(a.type !== "normal" && b.type === "normal") return 1;
+    if(a.type === "normal" && b.type !== "normal") return -1;
+    if(a.type !== "normal" && b.type !== "normal") return a.id-b.id;
+    if(suitOrder[a.suit] !== suitOrder[b.suit]) return suitOrder[a.suit]-suitOrder[b.suit];
+    return rankOrder[a.rank]-rankOrder[b.rank];
+  });
+  if(doRender) render();
+}
+
+function sortRank(){
+  hand.sort((a,b)=>{
+    if(isJoker(a) && !isJoker(b)) return 1;
+    if(!isJoker(a) && isJoker(b)) return -1;
+    if(a.type !== "normal" && b.type === "normal") return 1;
+    if(a.type === "normal" && b.type !== "normal") return -1;
+    if(a.type !== "normal" && b.type !== "normal") return a.id-b.id;
+    if(rankOrder[a.rank] !== rankOrder[b.rank]) return rankOrder[a.rank]-rankOrder[b.rank];
+    return suitOrder[a.suit]-suitOrder[b.suit];
+  });
+  render();
+}
+
+function cardHtml(c, clickable=false, index=0){
+  let cls = "card";
+  if(isPrintedJoker(c)) cls += " printed";
+  else if(isWildJoker(c)) cls += " wild";
+  if(isRed(c)) cls += " red";
+  const click = clickable ? " onclick='discardCard("+index+")'" : "";
+  return "<div class='" + cls + "'" + click + ">" + cardName(c) + "</div>";
+}
+
+function render(){
+  document.getElementById("wildText").innerText = wildText;
+  document.getElementById("handCount").innerText = hand.length;
+  document.getElementById("deckCount").innerText = deck.length;
+
+  document.getElementById("drawDeckBtn").disabled = !gameStarted || phase !== "draw";
+  document.getElementById("drawDiscardBtn").disabled = !gameStarted || phase !== "draw";
+
+  let turn = "Start a new game";
+  let instruction = "Start a new game.";
+  if(gameStarted && phase === "draw"){
+    turn = "Draw one card";
+    instruction = "Choose deck or discard pile.";
+  }
+  if(gameStarted && phase === "discard"){
+    turn = "Discard one card";
+    instruction = "Tap one card to discard.";
+  }
+  document.getElementById("turnText").innerText = turn;
+  document.getElementById("instruction").innerText = instruction;
+
+  const top = discard[discard.length-1];
+  document.getElementById("discardArea").innerHTML = top ? "<div class='card discard'>" + cardName(top) + "</div>" : "No discarded card";
+
+  let h = "";
+  hand.forEach((c,i)=> h += cardHtml(c,true,i));
+  document.getElementById("handArea").innerHTML = h;
+}
+
+function ids(cards){ return new Set(cards.map(c=>c.id)); }
+function removeUsed(cards, usedCards){
+  const used = ids(usedCards);
+  return cards.filter(c => !used.has(c.id));
+}
+
+function findPureSequences(cards){
+  let remaining = cards.slice();
+  let groups = [];
+
+  for(const s of suits){
+    let suitCards = remaining
+      .filter(c => c.type === "normal" && !isJoker(c) && c.suit === s)
+      .sort((a,b)=>rankOrder[a.rank]-rankOrder[b.rank]);
+
+    let usedLocal = new Set();
+
+    for(let i=0;i<suitCards.length;i++){
+      if(usedLocal.has(suitCards[i].id)) continue;
+      let run = [suitCards[i]];
+      let last = rankOrder[suitCards[i].rank];
+
+      for(let j=i+1;j<suitCards.length;j++){
+        if(usedLocal.has(suitCards[j].id)) continue;
+        const val = rankOrder[suitCards[j].rank];
+        if(val === last + 1){
+          run.push(suitCards[j]);
+          last = val;
+        } else if(val > last + 1){
+          break;
+        }
+      }
+
+      if(run.length >= 3){
+        groups.push({name:"Pure Sequence", cards:run});
+        run.forEach(c=>usedLocal.add(c.id));
+        remaining = removeUsed(remaining, run);
+      }
+    }
+  }
+  return {groups, remaining};
+}
+
+function findSets(cards){
+  let remaining = cards.slice();
+  let groups = [];
+
+  for(const r of ranks){
+    let normal = remaining.filter(c => c.type === "normal" && !isJoker(c) && c.rank === r);
+    let chosen = [];
+    let seen = new Set();
+
+    for(const c of normal){
+      if(!seen.has(c.suit)){
+        chosen.push(c);
+        seen.add(c.suit);
+      }
+    }
+
+    if(chosen.length >= 3){
+      const setCards = chosen.slice(0,4);
+      groups.push({name:"Set", cards:setCards});
+      remaining = removeUsed(remaining, setCards);
+    }
+  }
+
+  return {groups, remaining};
+}
+
+function findImpureSequences(cards){
+  let remaining = cards.slice();
+  let groups = [];
+
+  let changed = true;
+  while(changed){
+    changed = false;
+    const jokers = remaining.filter(isJoker);
+    if(jokers.length === 0) break;
+
+    outer:
+    for(const s of suits){
+      const normal = remaining
+        .filter(c => c.type === "normal" && !isJoker(c) && c.suit === s)
+        .sort((a,b)=>rankOrder[a.rank]-rankOrder[b.rank]);
+
+      for(let i=0;i<normal.length;i++){
+        for(let j=i+1;j<normal.length;j++){
+          const gap = rankOrder[normal[j].rank] - rankOrder[normal[i].rank];
+          const needed = gap - 1;
+          if(gap >= 2 && gap <= 4 && needed > 0 && needed <= jokers.length){
+            const seq = [normal[i], ...jokers.slice(0,needed), normal[j]];
+            if(seq.length >= 3){
+              groups.push({name:"Impure Sequence", cards:seq});
+              remaining = removeUsed(remaining, seq);
+              changed = true;
+              break outer;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return {groups, remaining};
+}
+
+function analyse(){
+  let working = hand.slice();
+  let allGroups = [];
+
+  const pure = findPureSequences(working);
+  allGroups.push(...pure.groups);
+  working = pure.remaining;
+
+  const impure = findImpureSequences(working);
+  allGroups.push(...impure.groups);
+  working = impure.remaining;
+
+  const sets = findSets(working);
+  allGroups.push(...sets.groups);
+  working = sets.remaining;
+
+  const pureCount = allGroups.filter(g => g.name === "Pure Sequence").length;
+  const sequenceCount = allGroups.filter(g => g.name.includes("Sequence")).length;
+  const setCount = allGroups.filter(g => g.name.includes("Set")).length;
+  const unmatched = working.length;
+  const ready = pureCount >= 1 && sequenceCount >= 2 && unmatched === 0;
+
+  return {groups:allGroups, remaining:working, pureCount, sequenceCount, setCount, unmatched, ready};
+}
+
+function analyseHand(){
+  if(!gameStarted) return alert("Start a new game first.");
+  const result = analyse();
+  let html = "<div class='stat'>";
+  html += "Pure Sequences: <span class='" + (result.pureCount>=1?"good":"bad") + "'>" + result.pureCount + "</span><br>";
+  html += "Total Sequences: <span class='" + (result.sequenceCount>=2?"good":"bad") + "'>" + result.sequenceCount + "</span><br>";
+  html += "Sets: <span class='warn'>" + result.setCount + "</span><br>";
+  html += "Ungrouped Cards: <span class='" + (result.unmatched===0?"good":"bad") + "'>" + result.unmatched + "</span><br>";
+  html += "Declaration Ready: <span class='" + (result.ready?"good":"bad") + "'>" + (result.ready?"YES":"NO") + "</span>";
+  html += "</div>";
+
+  if(result.groups.length === 0){
+    html += "<div class='group'>No groups detected.</div>";
+  }
+
+  result.groups.forEach(g=>{
+    html += "<div class='group'><div class='groupTitle'>" + g.name + "</div>";
+    g.cards.forEach(c => html += cardHtml(c,false));
+    html += "</div>";
+  });
+
+  if(result.remaining.length > 0){
+    html += "<div class='group'><div class='groupTitle'>Unmatched</div>";
+    result.remaining.forEach(c => html += cardHtml(c,false));
+    html += "</div>";
+  }
+
+  html += "<div class='small'>This is a practice assistant. Full declaration logic will improve in later versions.</div>";
+
+  document.getElementById("analysisArea").innerHTML = html;
+}
+
+function declareHand(){
+  if(!gameStarted) return alert("Start a new game first.");
+  if(hand.length !== 13) return alert("You must discard down to 13 cards before declaring.");
+  const result = analyse();
+  analyseHand();
+  if(result.ready){
+    alert("Valid declaration based on current V6 logic.");
+  } else {
+    alert("Not ready to declare yet.");
+  }
+}
+
+toggleCustomJoker();
+render();
+</script>
+</body>
+</html>
